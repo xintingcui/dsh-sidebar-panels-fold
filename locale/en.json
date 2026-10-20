@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sidebar Panel Fold",
+    "description": "Folds the sidebar's global-panel rows into one trigger and lets you choose which panels stay visible, so a long list can no longer cover the workspace on phone or desktop."
+  }
+}

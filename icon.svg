@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none"
+     stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <!-- 三条面板条目，最下方两条被折叠收拢 -->
+  <rect x="4" y="3.5" width="16" height="4.2" rx="1.4" fill="currentColor" fill-opacity="0.16"/>
+  <path d="M4.6 11.2h14.8M4.6 15h14.8"/>
+  <path d="M9.4 18.6 12 21.2l2.6-2.6"/>
+</svg>

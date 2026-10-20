@@ -1,0 +1,5 @@
+# 只插入一个条目：宿主半边（index.js）是空实现，真正的渲染在 client.js。
+# id 与包名一致，便于 plugin_manager 定位与回滚。
+- insert:
+    - id: sidebar-panels-fold
+      name: dsh-sidebar-panels-fold
