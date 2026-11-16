@@ -1,5 +1,8 @@
 # dsh-sidebar-panels-fold
 
+**当前版本：v1.3.1** · 兼容 DSH 旧版（`nav` 直接子节点是 `<button>`）与新版（DSH 1.3+ 引入
+`div.panelEntry` 包装层）两代侧边栏结构。
+
 Sidebar **global-panel row** presentation patch for DeepSeek Harness.
 把侧边栏左上角的全局面板条目折叠成一行，并可勾选「只显示哪几个」。手机端与桌面端同一套规则。
 
@@ -32,9 +35,13 @@ div.root
 1. **数据面** `ctx.slots.entriesOfSlot('sidebar.panellist')` 读权威清单
    `[{ id, order, label }]`（label 支持 thunk，跟随语言）。
 2. **定位面** `findNav()` 三级策略，见下表。
-3. **呈现面** 给每个行 `<button>` 打 `data-dsh-pf-row` / `data-dsh-pf-id` /
-   `data-dsh-pf-shown="0|1"`，本插件自己的 `<style>` 用
-   `[data-dsh-pf-row][data-dsh-pf-shown="0"]{display:none!important}` 收起。
+3. **呈现面** `entriesOf()` 把 nav 每个子节点归一成 `{ wrapper, button }`：
+   - 旧版：子节点本身就是 `<button>`，`wrapper === button`；
+   - 新版：子节点是 `<div class="…panelEntry">`，`<button>` 在包装层内，`wrapper` 是那个 div。
+     此时只隐藏 `button` 会在 `panelList` 的 `gap` 里留下空档，所以 `data-dsh-pf-row` /
+     `data-dsh-pf-shown="0|1"` 打在 **wrapper** 上，`data-dsh-pf-id` 两边都写（按钮保语义，
+     包装层保呈现），`<style>` 用
+     `[data-dsh-pf-row][data-dsh-pf-shown="0"]{display:none!important}` 收起。
 4. **交互面** 在 `nav` 末尾挂一个自有触发器（`data-dsh-pf-trigger`），点开是自建弹层：
    全部显示 / 全部收起 / 恢复默认 / 逐项勾选。选择存 `localStorage`。
 5. **守护面** `MutationObserver`（React 重渲染会抹掉属性）+ `ResizeObserver` +
@@ -144,9 +151,39 @@ div.root
 ## 自检
 
 ```bash
+node entries-check.mjs          # 4 组：旧版直接子 button / 新版 panelEntry 包装 / 更多入口 / 自有触发器
 node header-fold-check.mjs      # 17 项：头部判据 / 排除 / 只改显示 / 防回退
 node workspace-float-check.mjs  # 20 项：悬浮判据 / 不动结构 / 不遮蔽槽位 / 还原 / 默认关闭
 ```
+
+## 版本
+
+### v1.3.1 — 修复新版 DSH 侧栏折叠失效
+
+DSH 1.3+ 把 `nav.panelList` 的每个面板行包进了 `<div class="…panelEntry">`：
+
+```
+nav.panelList
+├─ div.panelEntry  →  button.panelRow   ← 新版
+├─ div.panelEntry  →  button.panelRow
+└─ div.moreAnchor  →  button[aria-haspopup]  （宿主自带「更多」）
+```
+
+旧版 `directButtons()` 只认 `nav` 的**直接子 `<button>`**，因此新版下一个都匹配不到，
+`apply()` 命中 `rows.length === 0` 后直接返回，表现为「左侧完全无法折叠」且不报错。
+
+修复：
+
+- 新增 `entriesOf()`，把 nav 每个子节点归一成 `{ wrapper, button }`，两代结构同时兼容。
+- 呈现属性打在 `wrapper` 上（新版隐藏 div、旧版隐藏 button 本身），`data-dsh-pf-id` 两边都写。
+- 宿主自带的 `[aria-haspopup]`「更多」入口不计入面板行，避免折叠计数偏大。
+- `stop()` 额外按 `data-dsh-pf-id` 全量清理，新版卸载后不留残留属性。
+
+旧版 DSH 行为完全不变：`wrapper === button`，与 v1.3.0 等价。
+
+### v1.3.0
+
+左侧工作区悬浮（`sidebar.workspaces`）与标题栏操作收容（`conversation.session.header.actions`）。
 
 ## 目录
 
@@ -157,6 +194,7 @@ index.js            宿主半边（空实现，满足装载契约）
 client.js           全部逻辑（浏览器半边）
 locale/{zh,en}.json 插件列表里的标题/描述
 icon.svg            插件图标
+entries-check.mjs         两代 panelList 结构（旧版 button / 新版 panelEntry）的开发期自检
 header-fold-check.mjs     头部收容的开发期自检
 workspace-float-check.mjs 工作区悬浮的开发期自检
 ```

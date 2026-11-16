@@ -442,12 +442,32 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
       //       —— label 来自同一份槽位数据，天然跟随语言切换，不写死中文/英文
       //   L3  结构兜底：父级是 flex 列、自己 ≥2 个直接 button 子节点、
       //       且后面跟着一个 overflow:hidden 的兄弟（regionArea）—— 唯一命中才采用
-      function directButtons(el) {
+      //
+      // 条目抽取兼容两代宿主结构：
+      //   旧版：nav 的直接子节点就是 <button>。
+      //   新版（DSH 1.3+）：每个面板被包进 <div class="…panelEntry">，<button> 在包装层里，
+      //        因此「直接子 button」一个都不存在 —— 这正是折叠失效的根因。
+      // 返回 {wrapper, button}：wrapper 是「要隐藏的盒子」，button 是「带语义的那个」。
+      // 只隐藏 button 会在 panelList 的 gap 里留出空档，所以隐藏必须打在 wrapper 上。
+      // 宿主自带的「更多」入口（aria-haspopup）不是面板行，也不参与计数。
+      function entriesOf(el) {
         const out = [];
         for (const child of el.children) {
-          if (child.tagName === 'BUTTON' && !child.hasAttribute(TRIGGER_ATTR)) out.push(child);
+          if (child.hasAttribute(TRIGGER_ATTR)) continue;
+          if (child.tagName === 'BUTTON') {
+            if (!child.hasAttribute('aria-haspopup')) out.push({ wrapper: child, button: child });
+            continue;
+          }
+          const button = child.querySelector(':scope > button');
+          if (button !== null && !button.hasAttribute('aria-haspopup')) {
+            out.push({ wrapper: child, button });
+          }
         }
         return out;
+      }
+
+      function directButtons(el) {
+        return entriesOf(el).map((entry) => entry.button);
       }
 
       function findNav() {
@@ -576,17 +596,25 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
           return;
         }
 
+        // 标记双写：语义标记打在 button 上（弹层/校验脚本按它找行），
+        // 呈现标记（ROW_ATTR / SHOWN_ATTR）打在 wrapper 上（真正被隐藏的盒子）。
+        const entries = entriesOf(target);
+        const wrappers = entries.map((entry) => entry.wrapper);
         rows.forEach((row, index) => {
           const id = rowId(row, index);
           if (row.getAttribute(ID_ATTR) !== id) row.setAttribute(ID_ATTR, id);
-          if (!row.hasAttribute(ROW_ATTR)) row.setAttribute(ROW_ATTR, '1');
+          const wrapper = wrappers[index];
+          if (wrapper !== row && wrapper.getAttribute(ID_ATTR) !== id) {
+            wrapper.setAttribute(ID_ATTR, id);
+          }
+          if (!wrapper.hasAttribute(ROW_ATTR)) wrapper.setAttribute(ROW_ATTR, '1');
         });
 
         const shown = computeShown(rows);
         let hidden = 0;
-        rows.forEach((row, index) => {
+        wrappers.forEach((wrapper, index) => {
           const value = shown[index] ? '1' : '0';
-          if (row.getAttribute(SHOWN_ATTR) !== value) row.setAttribute(SHOWN_ATTR, value);
+          if (wrapper.getAttribute(SHOWN_ATTR) !== value) wrapper.setAttribute(SHOWN_ATTR, value);
           if (!shown[index]) hidden += 1;
         });
 
@@ -1166,11 +1194,16 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
           trigger.remove();
           trigger = null;
         }
-        // 还原：摘掉我们写入的呈现属性，侧边栏回到宿主原样
+        // 还原：摘掉我们写入的呈现属性，侧边栏回到宿主原样。
+        // 旧版 wrapper 就是 button（三者同在），新版 button 只带 ID_ATTR（呈现标记在包装 div 上），
+        // 因此 ID_ATTR 单独再扫一遍，否则新版会残留 id 标记。
         for (const row of document.querySelectorAll(`[${ROW_ATTR}]`)) {
           row.removeAttribute(ROW_ATTR);
           row.removeAttribute(SHOWN_ATTR);
           row.removeAttribute(ID_ATTR);
+        }
+        for (const node of document.querySelectorAll(`[${ID_ATTR}]`)) {
+          node.removeAttribute(ID_ATTR);
         }
         for (const element of document.querySelectorAll(`nav[${NAV_ATTR}]`)) {
           element.removeAttribute(NAV_ATTR);

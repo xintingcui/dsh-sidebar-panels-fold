@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-panels-fold",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "type": "module",
   "description": "Fold the sidebar global-panel rows, collapse title-bar actions, and optionally float the left workspace browser without touching any other plugin.",
