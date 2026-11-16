@@ -31,6 +31,24 @@ window.__ModuleLoader__.load({
     const ID_ATTR = 'data-dsh-pf-id';
     const TRIGGER_ATTR = 'data-dsh-pf-trigger';
 
+    /* 顶部标题栏：只收容「含按钮」的条目，左侧标签与右侧 utilities 不碰。 */
+    const HEADER_SLOT = 'conversation.session.header.actions';
+    const HEADER_ANCHOR = `[data-slot="${HEADER_SLOT}"]`;
+    const HDR_HIDDEN_ATTR = 'data-dsh-pf-hdr-hidden';
+    const HDR_TRIGGER_ATTR = 'data-dsh-pf-hdr-trigger';
+    const HDR_STORAGE_KEY = 'dsh.sidebar-panels-fold.header.v1';
+    /** 超过这个高度的条目视为面板而非按钮行，永不收起。 */
+    const HEADER_ROW_MAX_PX = 96;
+
+    /* 左侧工作区悬浮：把 `sidebar.workspaces` 的槽锚点整体脱流，原位留占位。
+       只改样式，不移节点、不克隆、不遮蔽槽位 —— 工作区插件（dsh-better-workspace）
+       的 fiber、类名、事件、对外行为全部不变。 */
+    const WS_SLOT = 'sidebar.workspaces';
+    const WS_ANCHOR = `[data-slot="${WS_SLOT}"]`;
+    const WS_SHELL_ATTR = 'data-dsh-pf-ws-shell';
+    const WS_FLOAT_ATTR = 'data-dsh-pf-ws-float';
+    const WS_STORAGE_KEY = 'dsh.sidebar-panels-fold.workspace.v1';
+
     /** 断点与 layout 包的 SIDEBAR_AUTO_COLLAPSE 保持一致（窄屏 = 抽屉式侧边栏）。 */
     const NARROW_QUERY = '(max-width: 1023px)';
     const RAIL_MAX_PX = 72;
@@ -54,7 +72,11 @@ window.__ModuleLoader__.load({
       'pop.empty': '当前没有可控制的面板条目。',
       'pop.close': '关闭',
       'pop.active': '当前',
-      'pop.unknown': '未登记条目'
+      'pop.unknown': '未登记条目',
+      'header.expand': '展开顶部操作（{count} 项）',
+      'header.collapse': '收起顶部操作',
+      'settings.floatWorkspace': '左侧工作区悬浮',
+      'settings.floatWorkspaceHint': '把左侧的工作区/会话浏览区浮在一层之上，原位保留占位；不改动工作区插件的任何行为。'
     };
     const en = {
       'trigger.manage': 'Global panels',
@@ -67,7 +89,11 @@ window.__ModuleLoader__.load({
       'pop.empty': 'No panel entries to manage right now.',
       'pop.close': 'Close',
       'pop.active': 'Current',
-      'pop.unknown': 'Unlisted entry'
+      'pop.unknown': 'Unlisted entry',
+      'header.expand': 'Show header actions ({count})',
+      'header.collapse': 'Collapse header actions',
+      'settings.floatWorkspace': 'Float workspace browser',
+      'settings.floatWorkspaceHint': 'Lifts the workspace/session browser onto its own layer with a placeholder left in place. No workspace plugin behaviour changes.'
     };
 
     /* ------------------------------------------------------------------ *
@@ -77,6 +103,48 @@ window.__ModuleLoader__.load({
     const CSS = `
 /* 收起的行：仅本插件写入的 data-dsh-pf-shown="0" 生效 */
 [${ROW_ATTR}][${SHOWN_ATTR}="0"]{display:none!important}
+
+/* 工作区悬浮：锚点脱流浮起。原区域由 regionArea 的 flex:1 自己撑高，
+   所以不写任何占位高度（写死会逐帧膨胀）。宽度/位置由脚本按实时矩形写入。 */
+[${WS_ANCHOR}][${WS_FLOAT_ATTR}="1"]{
+  position:fixed!important;z-index:2147482990!important;
+  margin:0!important;overflow:auto!important;
+  border-radius:12px;
+  border:1px solid var(--dsw-alias-border-l2);
+  background:var(--dsw-alias-bg-layer-1);
+  box-shadow:0 18px 44px rgba(0,0,0,.32);
+}
+
+/* 顶部操作：被收容的条目直接隐藏，绝不移出 DOM（React 持有它们） */
+[${HDR_HIDDEN_ATTR}="1"]{display:none!important}
+
+/* 顶部触发器：与 header 里的小图标按钮同尺寸同色 */
+button[${HDR_TRIGGER_ATTR}]{
+  box-sizing:border-box;flex:none;width:28px;height:28px;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--dsw-alias-label-secondary);background:0 0;
+  border:1px solid transparent;border-radius:var(--dsw-radius-md);
+  cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+button[${HDR_TRIGGER_ATTR}]:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+button[${HDR_TRIGGER_ATTR}]:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}
+button[${HDR_TRIGGER_ATTR}][aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-active);color:var(--dsw-alias-label-primary)}
+button[${HDR_TRIGGER_ATTR}] svg{display:block;flex:none;pointer-events:none}
+
+/* 设置行：通用设置区只堆行，内部排版由本插件负责 */
+.pf-setting-row{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 0;cursor:pointer;
+  font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);
+}
+.pf-setting-row input{
+  width:15px;height:15px;flex:none;margin:2px 0 0;
+  accent-color:var(--dsw-alias-brand-primary);
+}
+.pf-setting-row .pf-setting-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pf-setting-row .pf-setting-hint{
+  font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);
+}
 
 /* 触发器：尽量与宿主 panelRow 的度量对齐（36px 行高 / radius-md / hover 令牌） */
 button[${TRIGGER_ATTR}]{
@@ -207,6 +275,40 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
       return () => tag.remove();
     }
 
+    /* ------------------------------------------------------------------ *
+     * 设置行组件（在 factory 作用域里取一次 React，避免每次渲染都 require）
+     * ------------------------------------------------------------------ */
+    const React = require('react');
+    /** 设置行需要把开关写回引擎；引擎在 apply() 里创建，故用引用传递。 */
+    const engineRef = { current: null };
+
+    function WorkspaceFloatRow(props) {
+      const { useState } = React;
+      const t = props.t ?? (() => '');
+      const [on, setOn] = useState(readWorkspaceFloat());
+      const toggle = (next) => {
+        setOn(next);
+        writeWorkspaceFloat(next);
+        engineRef.current?.setWorkspaceFloat(next);
+      };
+      return React.createElement(
+        'label',
+        { className: 'pf-setting-row' },
+        React.createElement('input', {
+          type: 'checkbox',
+          checked: on,
+          onChange: (event) => toggle(event.target.checked)
+        }),
+        React.createElement(
+          'span',
+          { className: 'pf-setting-text' },
+          React.createElement('span', { className: 'pf-setting-title' }, t('settings.floatWorkspace')),
+          React.createElement('span', { className: 'pf-setting-hint' }, t('settings.floatWorkspaceHint'))
+        )
+      );
+    }
+
+
     const svg = (path, size = 16) =>
       `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" fill="none" ` +
       `stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
@@ -214,6 +316,46 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
     const ICON_SLIDERS = svg('<path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h12M20 17h0"/>' +
       '<circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/>');
     const ICON_CLOSE = svg('<path d="m6 6 12 12M18 6 6 18"/>', 14);
+    const ICON_CHEVRON = svg('<path d="m6 9 6 6 6-6"/>', 16);
+
+    /* 顶部操作收容状态：只记一个布尔，默认收起（标题优先）。 */
+    function readHeaderCollapsed() {
+      try {
+        const raw = window.localStorage.getItem(HDR_STORAGE_KEY);
+        if (raw === null) return true;
+        const parsed = JSON.parse(raw);
+        return parsed?.collapsed !== false;
+      } catch {
+        return true;
+      }
+    }
+
+    function writeHeaderCollapsed(collapsed) {
+      try {
+        window.localStorage.setItem(HDR_STORAGE_KEY, JSON.stringify({ collapsed }));
+      } catch {
+        /* 存不下就只影响本次会话 */
+      }
+    }
+
+    /* 左侧工作区悬浮开关：默认关闭（不改变既有行为）。 */
+    function readWorkspaceFloat() {
+      try {
+        const raw = window.localStorage.getItem(WS_STORAGE_KEY);
+        if (raw === null) return false;
+        return JSON.parse(raw)?.float === true;
+      } catch {
+        return false;
+      }
+    }
+
+    function writeWorkspaceFloat(float) {
+      try {
+        window.localStorage.setItem(WS_STORAGE_KEY, JSON.stringify({ float }));
+      } catch {
+        /* 同上 */
+      }
+    }
 
     /* ------------------------------------------------------------------ *
      * 引擎
@@ -225,6 +367,15 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
       let trigger = null;
       let roTarget = null;
       let pop = null;
+      // 头部收容状态（放在这里而不是 8b 段：schedule() 首次可能在 8b 的 let 之前触发）
+      let hdrAnchor = null;
+      let hdrTrigger = null;
+      let hdrCollapsed = readHeaderCollapsed();
+      let wsFloat = readWorkspaceFloat();
+      // 工作区悬浮的尺寸观察器（与侧栏 ro 分开，避免互相 disconnect）
+      let roWs =
+        typeof ResizeObserver === 'function' ? new ResizeObserver(() => schedule()) : null;
+      let roWsTarget = null;
       let disposed = false;
       let warned = false;
       let frame = 0;
@@ -490,6 +641,9 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
         if (disposed || frame !== 0) return;
         frame = window.requestAnimationFrame(() => {
           frame = 0;
+          // 三条能力彼此独立：任一边找不到目标都不影响其余。
+          applyHeader();
+          applyWorkspaceFloat();
           apply();
         });
       }
@@ -743,19 +897,203 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
         guard = null;
       }
 
-      /* ---------------- 8. 守护面：DOM/尺寸/语言变化后重新收敛 ---------------- */
+      /* ---------------- 8b. 头部收容：收拢标题右侧的操作条目 ---------------- */
+      //
+      // 只碰 `conversation.session.header.actions` 这一槽（标题右侧那排）。
+      // 判据是「条目自身渲染出了按钮」：agent-preset 是纯文本 span、
+      // dsh-rewind-portals 只挂 portal，二者都不含按钮，因此不会被误收。
+      //
+      // 呈现方式：收起=display:none；展开=把原条目 position:fixed 悬浮到弹层里。
+      // 绝不移动也不克隆节点 —— React 合成事件挂在 root 上，克隆出的 DOM 没有
+      // fiber，点了不会触发；移动则会破坏 React 的删除/插入记账。悬浮只改样式，
+      // 节点仍归 React 所有，所以弹层里的按钮保持原行为。
+
+      /** 该槽的直接子元素即各条目（渲染器对每个条目锚定一个 display:contents 包装）。 */
+      function hdrEntries() {
+        if (hdrAnchor === null || !hdrAnchor.isConnected) return [];
+        return Array.from(hdrAnchor.children).filter(
+          (node) => node instanceof Element && !node.hasAttribute(HDR_TRIGGER_ATTR)
+        );
+      }
+
+      /**
+       * 「可收容」= 条目渲染出了按钮，且它本身是流内操作条。
+       *
+       * 必须排除同槽里的弹层：`undo-buttons` 打开快照面板时，面板是同一个
+       * slot 的兄弟子元素，也含按钮 —— 若一并收起，点了「快照」却什么都
+       * 看不到，等于把功能弄坏。弹层用 absolute/fixed 脱流，操作条留在流内。
+       */
+      function isCollapsibleEntry(node) {
+        if (node.querySelector('button') === null) return false;
+        // 面板/对话框：任何形态都不收
+        if (node.querySelector('[role="dialog"],[role="menu"]') !== null) return false;
+        if (node.hasAttribute('role') && /dialog|menu/.test(node.getAttribute('role'))) return false;
+        const style = window.getComputedStyle(node);
+        const position = style.position;
+        if (position === 'absolute' || position === 'fixed') return false;
+        // 大块区域不是按钮行（面板常以流内卡片形式出现）
+        return node.getBoundingClientRect().height <= HEADER_ROW_MAX_PX;
+      }
+
+      function collapsibleEntries(entries) {
+        return entries.filter(isCollapsibleEntry);
+      }
+
+      function findHeaderAnchor() {
+        const anchor = document.querySelector(HEADER_ANCHOR);
+        if (anchor !== hdrAnchor) {
+          // 槽位重挂（切换会话/视图）后旧触发器一起作废
+          if (hdrTrigger !== null) {
+            hdrTrigger.remove();
+            hdrTrigger = null;
+          }
+          hdrAnchor = anchor;
+        }
+        return hdrAnchor;
+      }
+
+      function mountHeaderTrigger() {
+        if (hdrAnchor === null) return;
+        const target = hdrAnchor.parentElement;
+        if (target === null) return;
+        if (hdrTrigger !== null && !hdrTrigger.isConnected) hdrTrigger = null;
+        if (hdrTrigger === null) {
+          hdrTrigger = document.createElement('button');
+          hdrTrigger.type = 'button';
+          hdrTrigger.setAttribute(HDR_TRIGGER_ATTR, '1');
+          hdrTrigger.setAttribute('aria-haspopup', 'true');
+          hdrTrigger.innerHTML = ICON_CHEVRON;
+          hdrTrigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            // 触发器是纯 UI 开关：只决定弹层开合，不改「是否有可收条目」的事实
+            hdrCollapsed = !hdrCollapsed;
+            writeHeaderCollapsed(hdrCollapsed);
+            applyHeader();
+          });
+        }
+        // 贴在 actions 槽之后、utilities 之前
+        if (hdrTrigger.previousElementSibling !== hdrAnchor) {
+          target.insertBefore(hdrTrigger, hdrAnchor.nextElementSibling);
+        }
+        const count = collapsibleEntries(hdrEntries()).length;
+        const aria = hdrCollapsed
+          ? t('header.expand', { count })
+          : t('header.collapse');
+        if (hdrTrigger.getAttribute('aria-label') !== aria) hdrTrigger.setAttribute('aria-label', aria);
+        if (hdrTrigger.getAttribute('title') !== aria) hdrTrigger.setAttribute('title', aria);
+        const expanded = hdrCollapsed ? 'false' : 'true';
+        if (hdrTrigger.getAttribute('aria-expanded') !== expanded) {
+          hdrTrigger.setAttribute('aria-expanded', expanded);
+        }
+        // 没有可收容的条目就不显示触发器
+        hdrTrigger.style.display = count === 0 ? 'none' : '';
+      }
+
+      function applyHeader() {
+        if (disposed) return;
+        const anchor = findHeaderAnchor();
+        if (anchor === null) return;
+        const collapsible = collapsibleEntries(hdrEntries());
+        const collapsed = hdrCollapsed === true || collapsible.length === 0;
+
+        // 两条互斥的呈现态：
+        //   收起 → display:none（不占位，标题拿回宽度）
+        //   展开 → 原槽位正常显示（原地展开，不再有悬浮层）
+        for (const node of collapsible) {
+          const value = collapsed ? '1' : '0';
+          if (node.getAttribute(HDR_HIDDEN_ATTR) !== value) node.setAttribute(HDR_HIDDEN_ATTR, value);
+        }
+        mountHeaderTrigger();
+      }
+      /* ---------------- 8d. 左侧工作区悬浮 ---------------- */
+      //
+      // 安全悬浮的唯一做法：脱流**原锚点**，绝不移动、绝不克隆、绝不遮蔽槽位。
+      // 这样 dsh-better-workspace 的 fiber、类名、事件、对外行为全部原样，
+      // 悬浮只是几何变化。
+      //
+      // 定位依据 `regionArea`（锚点的父级）的实时矩形：它是 flex:1 + overflow:hidden，
+      // 位置随侧栏折叠/宽度变化，所以每次收敛都重算，并观察它的尺寸。
+
+      function workspaceShell() {
+        const anchor = document.querySelector(WS_ANCHOR);
+        if (anchor === null) return null;
+        const shell = anchor.parentElement;
+        if (shell === null) return null;
+        if (!shell.hasAttribute(WS_SHELL_ATTR)) shell.setAttribute(WS_SHELL_ATTR, '1');
+        return shell;
+      }
+
+      function releaseWorkspaceFloat() {
+        const anchor = document.querySelector(WS_ANCHOR);
+        if (anchor !== null) {
+          anchor.removeAttribute(WS_FLOAT_ATTR);
+          anchor.style.removeProperty('left');
+          anchor.style.removeProperty('top');
+          anchor.style.removeProperty('width');
+          anchor.style.removeProperty('height');
+        }
+        const shell = document.querySelector(`[${WS_SHELL_ATTR}]`);
+        if (shell !== null) {
+          shell.style.removeProperty('min-height');
+          shell.removeAttribute(WS_SHELL_ATTR);
+        }
+      }
+
+      function applyWorkspaceFloat() {
+        if (disposed) return;
+        const shell = workspaceShell();
+        if (shell === null) return;
+        const anchor = document.querySelector(WS_ANCHOR);
+        if (anchor === null) return;
+
+        if (wsFloat !== true) {
+          if (roWs !== null && roWsTarget !== null) {
+            roWs.disconnect();
+            roWsTarget = null;
+          }
+          if (anchor.hasAttribute(WS_FLOAT_ATTR)) releaseWorkspaceFloat();
+          return;
+        }
+
+        // regionArea 尺寸变化（侧栏折叠、拖宽、抽屉开关）都直接影响浮层几何，
+        // 用独立的 ResizeObserver 观察它，避免与侧栏那个观察器互相 disconnect。
+        if (roWs !== null && roWsTarget !== shell) {
+          roWs.disconnect();
+          roWs.observe(shell);
+          roWsTarget = shell;
+        }
+
+        // 脱流后 regionArea 靠 flex:1 自己保持高度，因此这里只读矩形，不写占位高度。
+        const rect = shell.getBoundingClientRect();
+        // 折叠成 56px 轨道时没有可用宽度：不悬浮，避免浮出一个空壳
+        if (rect.width < 120 || rect.height < 120) {
+          releaseWorkspaceFloat();
+          return;
+        }
+
+        anchor.setAttribute(WS_FLOAT_ATTR, '1');
+        anchor.style.left = `${Math.round(rect.left)}px`;
+        anchor.style.top = `${Math.round(rect.top)}px`;
+        anchor.style.width = `${Math.round(rect.width)}px`;
+        anchor.style.height = `${Math.round(rect.height)}px`;
+      }
       // 自己的节点不参与触发：否则「把触发器 append 到 nav 末尾」会被自己的 observer
       // 当成外部变化，白跑一帧（也会在极端情况下形成 append→observe→append 的自激）。
       const own = (node) =>
         node instanceof Element &&
-        (node.hasAttribute(TRIGGER_ATTR) || node.hasAttribute('data-dsh-pf-pop'));
+        (node.hasAttribute(TRIGGER_ATTR) ||
+          node.hasAttribute(HDR_TRIGGER_ATTR) ||
+          node.hasAttribute('data-dsh-pf-pop'));
 
       const relevant = (node) => {
         if (!(node instanceof Element)) return false;
         if (own(node)) return false;
-        if (node === nav) return true;
+        if (node === nav || node === hdrAnchor) return true;
+        if (node.matches?.(`[data-slot="${HEADER_SLOT}"]`)) return true;
+        if (node.matches?.(WS_ANCHOR)) return true;
         if (node.matches?.('nav, button, [aria-current]')) return true;
-        return node.querySelector?.('nav, button') !== null;
+        return node.querySelector?.(`nav, button, [data-slot="${HEADER_SLOT}"], ${WS_ANCHOR}`) !== null;
       };
 
       const mo = new MutationObserver((records) => {
@@ -766,6 +1104,11 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
             if (node === nav) {
               nav = null;
               trigger = null;
+              return schedule();
+            }
+            if (node === hdrAnchor) {
+              hdrAnchor = null;
+              hdrTrigger = null;
               return schedule();
             }
             if (relevant(node)) return schedule();
@@ -812,6 +1155,10 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
         mo.disconnect();
         ro?.disconnect();
         roTarget = null;
+        roWs?.disconnect();
+        roWsTarget = null;
+        // 工作区还原：撤掉悬浮几何与占位高度，左栏回到宿主原样
+        releaseWorkspaceFloat();
         unwatchMedia();
         unwatchMedia = () => {};
         window.removeEventListener('resize', onResize);
@@ -828,6 +1175,15 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
         for (const element of document.querySelectorAll(`nav[${NAV_ATTR}]`)) {
           element.removeAttribute(NAV_ATTR);
         }
+        // 头部还原：摘掉折叠属性并移除触发器，标题栏回到宿主原样
+        for (const node of document.querySelectorAll(`[${HDR_HIDDEN_ATTR}]`)) {
+          node.removeAttribute(HDR_HIDDEN_ATTR);
+        }
+        if (hdrTrigger !== null) {
+          hdrTrigger.remove();
+          hdrTrigger = null;
+        }
+        hdrAnchor = null;
         nav = null;
       }
 
@@ -836,7 +1192,14 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
         schedule();
       }
 
-      return { start, syncPanels, onLocale };
+      /** 设置开关的写入口：切换后立刻收敛，不等下一帧交互。 */
+      function setWorkspaceFloat(next) {
+        wsFloat = next === true;
+        writeWorkspaceFloat(wsFloat);
+        applyWorkspaceFloat();
+      }
+
+      return { start, syncPanels, onLocale, setWorkspaceFloat };
     }
 
     return {
@@ -848,6 +1211,7 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
         ctx.effect(ensureStyle, 'sidebar-panels-fold: stylesheet');
 
         const engine = createEngine(ctx, t);
+        engineRef.current = engine;
 
         ctx.effect(() => {
           engine.syncPanels();
@@ -862,6 +1226,19 @@ button[${TRIGGER_ATTR}] svg{flex:none;display:block}
             unsubLocale();
           };
         }, 'sidebar-panels-fold: engine');
+
+        // 设置项：左侧工作区悬浮开关。通用设置区只堆行，行内容（含标签）由自己画。
+        ctx.slots.inject('settings.general.item', () =>
+          ctx.slots.register(
+            {
+              name: 'settings.general.item',
+              id: 'sidebar-panels-fold-workspace',
+              order: 25,
+              locale: NS
+            },
+            WorkspaceFloatRow
+          )
+        );
       }
     };
   }
